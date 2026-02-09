@@ -171,20 +171,26 @@
 
         document.addEventListener('mouseover', e => { if(e.target.tagName === 'BUTTON' || e.target.classList.contains('fa-solid')) audio.hover(); });
 
-        // --- BASE DE DADOS FIXA (Disponível em qualquer navegador/aba) ---
         const USUARIOS_PADRAO = [
             { user: "Gubernavit", pass: "5828", perms: {operar:true, criar:true, editar:true, apagar:true} },
             { user: "Teste", pass: "123", perms: {operar:true, criar:true, editar:true, apagar:true}, isGuest: true }
-            // Adicione novos usuários fixos aqui se desejar
         ];
 
         let uLogado = null; let mqttClient = null; let lastPing = 0; let sysOnline = false;
         let acaoPendente = null; let editIdx = null;
 
-        // Função auxiliar para pegar a lista completa (Fixos + Criados no navegador)
         function obterDB() {
             let criados = JSON.parse(localStorage.getItem('usuarios_guber')) || [];
             return [...USUARIOS_PADRAO, ...criados];
+        }
+
+        // --- NOVA FUNÇÃO DE VERIFICAÇÃO ---
+        function solicitarStatusGeral() {
+            if(mqttClient && mqttClient.isConnected()) {
+                let msg = new Paho.MQTT.Message("STATUS");
+                msg.destinationName = "guberlab/comando";
+                mqttClient.send(msg);
+            }
         }
 
         window.enviarMQTT = function(comando) {
@@ -195,6 +201,8 @@
                 msg.destinationName = "guberlab/comando";
                 mqttClient.send(msg);
                 audio.click();
+                // Solicita atualização de status após enviar qualquer comando
+                setTimeout(solicitarStatusGeral, 100); 
             }
         };
 
@@ -226,10 +234,14 @@
             mqttClient.onMessageArrived = (msg) => {
                 let p = msg.payloadString;
                 if(p === "PONG") {
+                    let jaEstavaOnline = sysOnline;
                     sysOnline = true; lastPing = Date.now();
                     document.getElementById('dot-system').className="dot online";
                     document.getElementById('msg-central').innerText="SISTEMA OPERACIONAL ONLINE";
                     document.getElementById('msg-central').style.color="#00e676";
+                    
+                    // Se acabou de conectar ao hardware, sincroniza o status inicial
+                    if(!jaEstavaOnline) solicitarStatusGeral();
                 }
                 if(p.startsWith("S")) {
                     let canal = parseInt(p.substring(1, p.indexOf(":"))) - 1;
@@ -298,13 +310,9 @@
             if(uLogado.isGuest) { audio.success(); fecharEdit(); return; }
             let dbCompleto = obterDB();
             let userAlvo = dbCompleto[editIdx];
-            
-            // Se for usuário de sistema, não permite alterar via navegador (segurança)
             if(USUARIOS_PADRAO.some(x => x.user === userAlvo.user)) { alert("USUÁRIO DE SISTEMA NÃO PODE SER ALTERADO"); fecharEdit(); return; }
-
             let criados = JSON.parse(localStorage.getItem('usuarios_guber')) || [];
             let idxNoLocal = criados.findIndex(x => x.user === userAlvo.user);
-            
             if(idxNoLocal !== -1) {
                 criados[idxNoLocal].perms = { operar: document.getElementById('p-operar').checked, criar: document.getElementById('p-criar').checked, editar: document.getElementById('p-editar').checked, apagar: document.getElementById('p-apagar').checked };
                 localStorage.setItem('usuarios_guber', JSON.stringify(criados));
@@ -318,10 +326,8 @@
         function validarAcao() {
             if(document.getElementById('pass-confirm').value !== uLogado.pass) { audio.error(); alert("SENHA INCORRETA"); return; }
             if(uLogado.isGuest) { audio.success(); fecharConfirm(); if(acaoPendente.tipo === 'edit') abrirEditar(acaoPendente.index); else listarUsers(); return; }
-
             let dbCompleto = obterDB();
             let criados = JSON.parse(localStorage.getItem('usuarios_guber')) || [];
-
             if(acaoPendente.tipo === 'add') {
                 criados.push({user: document.getElementById('new-user').value, pass: document.getElementById('new-pass').value, perms: {operar:true, criar:false, editar:false, apagar:false}});
                 localStorage.setItem('usuarios_guber', JSON.stringify(criados));

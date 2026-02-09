@@ -43,12 +43,13 @@ O GUBER-LAB utiliza o Broker **HiveMQ** para orquestrar as mensagens:
 
 ---
 
-## 💻 Instalação & Uso
+## 💻 Instalação & Teste
 
 1.  **Hospedagem**: O sistema está otimizado para **GitHub Pages**.
 2.  **Acesso Para testes**:
     * **User:** `Teste`
     * **Pass:** `123`
+    O usuario **"Teste"** tera acesso a todo o sistema mas nao tera poder de fazer nada.
 3.  **Configuração de Hardware**: Basta configurar seu ESP32/ESP8266 para escutar os tópicos acima via WebSockets na porta `8000`.
 
 ---

@@ -1,315 +1,629 @@
 <!DOCTYPE html>
+
 <html lang="pt-br">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>GUBER-LAB | Sistema de Controle</title>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
     
+
     <style>
+
         :root { --primary: #ff6a00; --bg: #0d0d0d; --card: #1a1a1a; --text: #ffffff; }
+
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding-top: 100px; display: flex; flex-direction: column; align-items: center; }
+
         .navbar { position: fixed; top: 0; width: 100%; background: #000; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; z-index: 1000; border-bottom: 1px solid #222; }
+
         .indicators { display: flex; gap: 40px; font-size: 11px; font-weight: bold; letter-spacing: 1.5px; }
+
         .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-left: 8px; background: #c62828; transition: 0.5s; }
+
         .dot.online { background: #00e676; box-shadow: 0 0 10px #00e676; }
+
         button { cursor: pointer; transition: all 0.2s; border: none; font-weight: bold; border-radius: 8px; outline: none; }
+
         button:hover { filter: brightness(1.3); transform: translateY(-1px); }
+
         button:active { filter: brightness(0.3) !important; transform: translateY(2px) !important; }
+
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.97); display: none; justify-content: center; align-items: center; z-index: 2000; }
+
         .box { background: var(--card); padding: 35px; border-radius: 20px; border: 2px solid var(--primary); width: 350px; text-align: center; }
+
         input { padding: 14px; width: 100%; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff; box-sizing: border-box; margin-bottom: 12px; }
+
         .btn-main { background: var(--primary); color: #000; width: 100%; padding: 14px; margin-top: 10px; }
+
         .password-wrapper { position: relative; width: 100%; margin-bottom: 12px; }
+
         .password-wrapper input { margin-bottom: 0; padding-right: 45px; }
+
         .toggle-eye { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--primary); opacity: 0.7; transition: 0.2s; z-index: 10; }
+
         #main-panel { display: none; width: 100%; max-width: 500px; text-align: center; }
+
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 30px; }
+
         .rele-card { background: var(--card); padding: 25px; border-radius: 18px; border: 1px solid #222; border-bottom: 4px solid #333; transition: 0.3s; }
+
         .rele-card.active { border-bottom-color: var(--primary); background: #222; }
+
         .btn-toggle { background: #333; color: #fff; width: 100%; margin-top: 15px; padding: 12px; font-size: 11px; }
+
         .btn-toggle.active { background: var(--primary); color: #000; }
+
         .config-row { display: flex; justify-content: space-between; align-items: center; background: #000; padding: 12px; margin-bottom: 10px; border-radius: 8px; font-size: 14px; }
+
         .perm-item { display: flex; justify-content: space-between; padding: 10px; background: #222; margin-bottom: 5px; border-radius: 6px; font-size: 13px; }
+
         .lista-scroll { max-height: 200px; overflow-y: auto; margin-bottom: 15px; padding-right: 5px; }
+
     </style>
+
 </head>
+
 <body>
 
+
+
     <div id="nav" class="navbar" style="display:none">
+
         <div class="indicators">
+
             <span>NUVEM <span id="dot-cloud" class="dot"></span></span>
+
             <span>SISTEMA <span id="dot-system" class="dot"></span></span>
+
         </div>
+
         <div style="display:flex; align-items:center; gap:20px">
+
             <span id="display-user" style="color:var(--primary); font-weight:bold; letter-spacing:1px"></span>
+
             <i class="fa-solid fa-gear" style="color:var(--primary); cursor:pointer; font-size:22px" onclick="abrirMenuConfig()"></i>
+
             <button onclick="location.reload()" style="background:#c62828; color:#fff; padding:6px 12px; font-size:10px; border-radius:5px">SAIR</button>
+
         </div>
+
     </div>
+
+
 
     <div id="login-screen" class="modal" style="display:flex">
+
         <div class="box">
+
             <h1 style="color: var(--primary); letter-spacing: 6px; margin-bottom: 30px; font-size: 2.5em;">GUBER-LAB</h1>
+
             <input type="text" id="user" placeholder="USUÁRIO">
+
             <div class="password-wrapper">
+
                 <input type="password" id="pass" placeholder="SENHA">
+
                 <i class="fa-solid fa-eye toggle-eye" onclick="togglePass('pass', this)"></i>
+
             </div>
+
             <button class="btn-main" onclick="tentarLogin()">ACESSAR PAINEL</button>
+
         </div>
+
     </div>
+
+
 
     <div id="modal-menu-config" class="modal">
+
         <div class="box">
+
             <h3 style="color:var(--primary)">AJUSTES GERAIS</h3>
+
             <button class="btn-main" onclick="abrirSubSom()" style="background:#222; color:#fff"><i class="fa-solid fa-volume-high"></i> CONFIGURAR SOM</button>
+
             <button id="btn-admin-users" class="btn-main" onclick="abrirAdmin()" style="background:#222; color:#fff; display:none"><i class="fa-solid fa-users-gear"></i> GERIR USUÁRIOS</button>
+
             <button class="btn-main" onclick="fecharModais()" style="background:transparent; color:#555">VOLTAR AO PAINEL</button>
+
         </div>
+
     </div>
+
+
 
     <div id="modal-sub-som" class="modal">
+
         <div class="box">
+
             <h3 style="color:var(--primary)">SOM E VOLUME</h3>
+
             <div class="config-row">
+
                 <span>Ativar Sons</span>
+
                 <input type="checkbox" id="cfg-sound-on" checked>
+
             </div>
+
             <div class="config-row" style="flex-direction:column; gap:10px">
+
                 <span>Volume de Saída</span>
+
                 <input type="range" id="cfg-vol" min="0" max="100" value="50" style="width:100%; accent-color:var(--primary)">
+
             </div>
+
             <button class="btn-main" onclick="irParaMenuPrincipal()">VOLTAR</button>
+
         </div>
+
     </div>
+
+
 
     <div id="modal-admin" class="modal">
+
         <div class="box">
+
             <h3 style="color:var(--primary)">USUÁRIOS CADASTRADOS</h3>
+
             <div id="lista-usuarios" class="lista-scroll"></div>
+
             <div id="form-add" style="display:none; border-top:1px solid #333; padding-top:15px">
+
                 <input type="text" id="new-user" placeholder="Nome">
+
                 <div class="password-wrapper">
+
                     <input type="password" id="new-pass" placeholder="Senha">
+
                     <i class="fa-solid fa-eye toggle-eye" onclick="togglePass('new-pass', this)"></i>
+
                 </div>
+
                 <button class="btn-main" onclick="abrirConfirmacao('add')">CADASTRAR</button>
+
             </div>
+
             <button class="btn-main" onclick="irParaMenuPrincipal()" style="background:#333; color:#fff">VOLTAR</button>
+
         </div>
+
     </div>
+
+
 
     <div id="modal-edit-perm" class="modal">
+
         <div class="box">
+
             <h3 id="edit-title" style="color:var(--primary)">Permissões</h3>
+
             <div class="perm-item">Operar Relés <input type="checkbox" id="p-operar"></div>
+
             <div class="perm-item">Criar Usuários <input type="checkbox" id="p-criar"></div>
+
             <div class="perm-item">Editar Usuários <input type="checkbox" id="p-editar"></div>
+
             <div class="perm-item">Apagar Usuários <input type="checkbox" id="p-apagar"></div>
+
             <button class="btn-main" onclick="salvarPermissoes()">SALVAR ALTERAÇÕES</button>
+
             <button class="btn-main" onclick="fecharEdit()" style="background:transparent; color:#555">CANCELAR</button>
+
         </div>
+
     </div>
+
+
 
     <div id="modal-confirm" class="modal">
+
         <div class="box" style="border-style: dashed">
+
             <h3 style="color:var(--primary)">AUTORIZAÇÃO</h3>
+
             <p style="font-size:12px; color:#777">Digite sua senha administrativa</p>
+
             <div class="password-wrapper">
+
                 <input type="password" id="pass-confirm" placeholder="Sua Senha">
+
                 <i class="fa-solid fa-eye toggle-eye" onclick="togglePass('pass-confirm', this)"></i>
+
             </div>
+
             <button class="btn-main" onclick="validarAcao()">CONFIRMAR</button>
+
             <button class="btn-main" onclick="fecharConfirm()" style="background:transparent; color:#555">CANCELAR</button>
+
         </div>
+
     </div>
+
+
 
     <div id="main-panel">
+
         <h1 style="color: var(--primary); margin: 0; font-size: 3.5em; letter-spacing: 5px;">GUBER-LAB</h1>
+
         <h2 id="msg-central" style="color:#444; font-size:14px; margin-top:10px; font-weight:normal">CONECTANDO AO HARDWARE...</h2>
+
         <div class="grid" id="rele-grid"></div>
+
         <div style="margin-top: 25px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%;">
+
             <button onclick="enviarMQTT('L_TUDO')" style="background:var(--primary); color:#000; padding: 15px;">LIGAR TUDO</button>
+
             <button onclick="enviarMQTT('D_TUDO')" style="background:#333; color:#fff; padding: 15px;">DESLIGAR TUDO</button>
+
         </div>
+
     </div>
 
+
+
     <script>
+
         function togglePass(inputId, icon) {
+
             const input = document.getElementById(inputId);
+
             if (input.type === "password") {
+
                 input.type = "text";
+
                 icon.classList.replace("fa-eye", "fa-eye-slash");
+
             } else {
+
                 input.type = "password";
+
                 icon.classList.replace("fa-eye-slash", "fa-eye");
+
             }
+
             if(typeof audio !== 'undefined') audio.click();
+
         }
+
+
 
         let audioCtx;
+
         function initAudio() { if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
         function som(freq, dur, tipo='sine') {
+
             if(!audioCtx || !document.getElementById('cfg-sound-on').checked) return;
+
             const v = document.getElementById('cfg-vol').value / 1500;
+
             const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+
             o.type = tipo; o.frequency.value = freq;
+
             g.gain.setValueAtTime(v, audioCtx.currentTime);
+
             g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+
             o.connect(g); g.connect(audioCtx.destination);
+
             o.start(); o.stop(audioCtx.currentTime + dur);
+
         }
 
+
+
         const audio = {
+
             click: () => som(400, 0.1),
+
             success: () => { som(500, 0.1); setTimeout(()=>som(850, 0.15), 100); },
+
             error: () => som(150, 0.4, 'sawtooth'),
+
             hover: () => som(800, 0.05)
+
         };
+
+
 
         document.addEventListener('mouseover', e => { if(e.target.tagName === 'BUTTON' || e.target.classList.contains('fa-solid')) audio.hover(); });
 
+
+
         const MASTER = { user: "Gubernavit", pass: "5828", perms: {operar:true, criar:true, editar:true, apagar:true} };
+
         let uLogado = null; let mqttClient = null; let lastPing = 0; let sysOnline = false;
+
         let acaoPendente = null; let editIdx = null;
 
+
+
         window.enviarMQTT = function(comando) {
+
             if(!uLogado || (!uLogado.perms.operar && uLogado.user !== MASTER.user)) { audio.error(); return; }
+
             if(mqttClient && mqttClient.isConnected()) {
+
                 let msg = new Paho.MQTT.Message(comando);
+
                 msg.destinationName = "guberlab/comando";
+
                 mqttClient.send(msg);
+
                 audio.click();
+
             }
+
         };
 
+
+
         function tentarLogin() {
+
             initAudio();
+
             let u = document.getElementById('user').value;
+
             let p = document.getElementById('pass').value;
+
             let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
+
             let c = db.find(x => x.user === u && x.pass === p);
+
             if(c) {
+
                 uLogado = c;
+
                 document.getElementById('login-screen').style.display='none';
+
                 document.getElementById('main-panel').style.display='block';
+
                 document.getElementById('nav').style.display='flex';
+
                 document.getElementById('display-user').innerText = u.toUpperCase();
+
                 montarGrid(); conectarMQTT(); audio.success();
+
             } else { audio.error(); alert("ACESSO NEGADO"); }
+
         }
+
+
 
         function montarGrid() {
+
             let grid = document.getElementById('rele-grid'); grid.innerHTML = "";
+
             for(let i=1; i<=8; i++) {
+
                 grid.innerHTML += `<div class="rele-card" id="card-${i-1}"><div style="font-size:10px; color:#555; font-weight:bold">CANAL ${i}</div><button class="btn-toggle" id="btn-${i-1}" onclick="enviarMQTT('T${i}')">DESLIGADO</button></div>`;
+
             }
+
         }
+
+
 
         function conectarMQTT() {
+
             // AJUSTE PARA GITHUB PAGES: PORTA 8884 e useSSL: true
+
             mqttClient = new Paho.MQTT.Client("broker.hivemq.com", 8884, "guberweb_" + Math.random().toString(16).substr(2, 6));
+
             
+
             mqttClient.onMessageArrived = (msg) => {
+
                 let p = msg.payloadString;
+
                 if(p === "PONG") {
+
                     if(!sysOnline) { audio.success(); sysOnline = true; }
+
                     lastPing = Date.now();
+
                     document.getElementById('dot-system').className="dot online";
+
                     document.getElementById('msg-central').innerText="SISTEMA OPERACIONAL ONLINE";
+
                     document.getElementById('msg-central').style.color="#00e676";
+
                 }
+
                 if(p.startsWith("S")) {
+
                     let canal = parseInt(p.substring(1, p.indexOf(":"))) - 1;
+
                     let ligado = p.split(":")[1] === "1";
+
                     let b = document.getElementById(`btn-${canal}`);
+
                     if(b) {
+
                         b.className = ligado ? "btn-toggle active" : "btn-toggle";
+
                         b.innerText = ligado ? "LIGADO" : "DESLIGADO";
+
                         document.getElementById(`card-${canal}`).className = ligado ? "rele-card active" : "rele-card";
+
                     }
+
                 }
+
             };
+
+
 
             mqttClient.onConnectionLost = (resp) => {
+
                 document.getElementById('dot-cloud').className="dot";
+
                 console.log("Conexão perdida: " + resp.errorMessage);
+
             };
 
+
+
             mqttClient.connect({ 
+
                 onSuccess: () => {
+
                     document.getElementById('dot-cloud').className="dot online";
+
                     mqttClient.subscribe("guberlab/status");
+
                     let ping = new Paho.MQTT.Message("PING");
+
                     ping.destinationName = "guberlab/comando";
+
                     mqttClient.send(ping);
+
                     setInterval(() => {
+
                         if(Date.now() - lastPing > 10000) {
+
                             if(sysOnline) audio.error(); sysOnline = false;
+
                             document.getElementById('dot-system').className="dot";
+
                             document.getElementById('msg-central').innerText="SISTEMA OFFLINE";
+
                             document.getElementById('msg-central').style.color="#444";
+
                         }
+
                     }, 5000);
+
                 },
+
                 useSSL: true // OBRIGATÓRIO PARA HTTPS/GITHUB
+
             });
+
         }
+
+
 
         function abrirMenuConfig() { 
+
             document.getElementById('modal-menu-config').style.display='flex';
+
             let adm = (uLogado.user === MASTER.user || uLogado.perms.criar || uLogado.perms.editar || uLogado.perms.apagar);
+
             document.getElementById('btn-admin-users').style.display = adm ? 'block' : 'none';
+
         }
+
         function abrirSubSom() { fecharModais(); document.getElementById('modal-sub-som').style.display='flex'; }
+
         function abrirAdmin() { fecharModais(); document.getElementById('modal-admin').style.display='flex'; listarUsers(); }
+
         function irParaMenuPrincipal() { fecharModais(); abrirMenuConfig(); }
+
         function fecharModais() { document.querySelectorAll('.modal').forEach(m => { if(m.id !== 'login-screen') m.style.display='none'; }); }
 
+
+
         function listarUsers() {
+
             let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
+
             let div = document.getElementById('lista-usuarios'); div.innerHTML = "";
+
             db.forEach((u, i) => {
+
                 if(u.user === MASTER.user) return;
+
                 div.innerHTML += `<div class="config-row"><span>${u.user}</span><div>${(uLogado.user===MASTER.user || uLogado.perms.editar) ? `<i class="fa-solid fa-gear" onclick="abrirConfirmacao('edit', ${i})" style="margin-right:15px; cursor:pointer"></i>` : ''}${(uLogado.user===MASTER.user || uLogado.perms.apagar) ? `<i class="fa-solid fa-trash-can" onclick="abrirConfirmacao('del', ${i})" style="color:#ff5252; cursor:pointer"></i>` : ''}</div></div>`;
+
             });
+
             document.getElementById('form-add').style.display = (uLogado.user===MASTER.user || uLogado.perms.criar) ? 'block' : 'none';
+
         }
+
+
 
         function abrirEditar(i) {
+
             editIdx = i; let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
+
             let u = db[i]; document.getElementById('edit-title').innerText = "Permissões: " + u.user;
+
             document.getElementById('p-operar').checked = u.perms.operar; document.getElementById('p-criar').checked = u.perms.criar;
+
             document.getElementById('p-editar').checked = u.perms.editar; document.getElementById('p-apagar').checked = u.perms.apagar;
+
             fecharModais(); document.getElementById('modal-edit-perm').style.display='flex';
+
         }
+
+
 
         function fecharEdit() { document.getElementById('modal-edit-perm').style.display='none'; abrirAdmin(); }
+
         function salvarPermissoes() {
+
             let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
+
             db[editIdx].perms = { operar: document.getElementById('p-operar').checked, criar: document.getElementById('p-criar').checked, editar: document.getElementById('p-editar').checked, apagar: document.getElementById('p-apagar').checked };
+
             localStorage.setItem('usuarios_guber', JSON.stringify(db)); audio.success(); fecharEdit();
+
         }
+
+
 
         function abrirConfirmacao(t, i=null) { acaoPendente = {tipo:t, index:i}; document.getElementById('modal-confirm').style.display='flex'; }
+
         function fecharConfirm() { document.getElementById('modal-confirm').style.display='none'; document.getElementById('pass-confirm').value=""; }
 
+
+
         function validarAcao() {
+
             if(document.getElementById('pass-confirm').value !== uLogado.pass) { audio.error(); alert("SENHA INCORRETA"); return; }
+
             let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
+
             if(acaoPendente.tipo === 'add') {
+
                 db.push({user: document.getElementById('new-user').value, pass: document.getElementById('new-pass').value, perms: {operar:true, criar:false, editar:false, apagar:false}});
+
                 document.getElementById('new-user').value = ""; document.getElementById('new-pass').value = "";
+
                 localStorage.setItem('usuarios_guber', JSON.stringify(db)); audio.success(); fecharConfirm(); listarUsers();
+
             } else if(acaoPendente.tipo === 'del') {
+
                 db.splice(acaoPendente.index, 1);
+
                 localStorage.setItem('usuarios_guber', JSON.stringify(db)); audio.success(); fecharConfirm(); listarUsers();
+
             } else if(acaoPendente.tipo === 'edit') {
+
                 audio.success(); fecharConfirm(); abrirEditar(acaoPendente.index);
+
             }
+
         }
+
     </script>
+
 </body>
+
 </html>

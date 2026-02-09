@@ -171,22 +171,25 @@
 
         document.addEventListener('mouseover', e => { if(e.target.tagName === 'BUTTON' || e.target.classList.contains('fa-solid')) audio.hover(); });
 
-        const MASTER = { user: "Gubernavit", pass: "5828", perms: {operar:true, criar:true, editar:true, apagar:true} };
-        const GUEST = { user: "Teste", pass: "123", perms: {operar:true, criar:true, editar:true, apagar:true}, isGuest: true };
-        
+        // --- BASE DE DADOS FIXA (Disponível em qualquer navegador/aba) ---
+        const USUARIOS_PADRAO = [
+            { user: "Gubernavit", pass: "5828", perms: {operar:true, criar:true, editar:true, apagar:true} },
+            { user: "Teste", pass: "123", perms: {operar:true, criar:true, editar:true, apagar:true}, isGuest: true }
+            // Adicione novos usuários fixos aqui se desejar
+        ];
+
         let uLogado = null; let mqttClient = null; let lastPing = 0; let sysOnline = false;
         let acaoPendente = null; let editIdx = null;
 
-        window.enviarMQTT = function(comando) {
-            if(!uLogado || (!uLogado.perms.operar && uLogado.user !== MASTER.user)) { audio.error(); return; }
-            
-            // MODO TESTE: Simula mas não envia
-            if(uLogado.isGuest) { 
-                audio.click(); 
-                console.log("Modo Teste: MQTT ignorado -> " + comando);
-                return; 
-            }
+        // Função auxiliar para pegar a lista completa (Fixos + Criados no navegador)
+        function obterDB() {
+            let criados = JSON.parse(localStorage.getItem('usuarios_guber')) || [];
+            return [...USUARIOS_PADRAO, ...criados];
+        }
 
+        window.enviarMQTT = function(comando) {
+            if(!uLogado || (!uLogado.perms.operar && uLogado.user !== USUARIOS_PADRAO[0].user)) { audio.error(); return; }
+            if(uLogado.isGuest) { audio.click(); return; }
             if(mqttClient && mqttClient.isConnected()) {
                 let msg = new Paho.MQTT.Message(comando);
                 msg.destinationName = "guberlab/comando";
@@ -199,10 +202,7 @@
             initAudio();
             let u = document.getElementById('user').value;
             let p = document.getElementById('pass').value;
-            
-            let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
-            db.push(GUEST); // Adiciona temporariamente o convidado para a verificação
-
+            let db = obterDB();
             let c = db.find(x => x.user === u && x.pass === p);
             if(c) {
                 uLogado = c;
@@ -223,12 +223,10 @@
 
         function conectarMQTT() {
             mqttClient = new Paho.MQTT.Client("broker.hivemq.com", 8884, "guberweb_" + Math.random().toString(16).substr(2, 6));
-            
             mqttClient.onMessageArrived = (msg) => {
                 let p = msg.payloadString;
                 if(p === "PONG") {
-                    if(!sysOnline) { audio.success(); sysOnline = true; }
-                    lastPing = Date.now();
+                    sysOnline = true; lastPing = Date.now();
                     document.getElementById('dot-system').className="dot online";
                     document.getElementById('msg-central').innerText="SISTEMA OPERACIONAL ONLINE";
                     document.getElementById('msg-central').style.color="#00e676";
@@ -244,12 +242,7 @@
                     }
                 }
             };
-
-            mqttClient.onConnectionLost = (resp) => {
-                document.getElementById('dot-cloud').className="dot";
-                console.log("Conexão perdida: " + resp.errorMessage);
-            };
-
+            mqttClient.onConnectionLost = () => { document.getElementById('dot-cloud').className="dot"; };
             mqttClient.connect({ 
                 onSuccess: () => {
                     document.getElementById('dot-cloud').className="dot online";
@@ -259,7 +252,7 @@
                     mqttClient.send(ping);
                     setInterval(() => {
                         if(Date.now() - lastPing > 10000) {
-                            if(sysOnline) audio.error(); sysOnline = false;
+                            sysOnline = false;
                             document.getElementById('dot-system').className="dot";
                             document.getElementById('msg-central').innerText="SISTEMA OFFLINE";
                             document.getElementById('msg-central').style.color="#444";
@@ -272,7 +265,7 @@
 
         function abrirMenuConfig() { 
             document.getElementById('modal-menu-config').style.display='flex';
-            let adm = (uLogado.user === MASTER.user || uLogado.isGuest || uLogado.perms.criar || uLogado.perms.editar || uLogado.perms.apagar);
+            let adm = (uLogado.user === USUARIOS_PADRAO[0].user || uLogado.isGuest || uLogado.perms.criar || uLogado.perms.editar || uLogado.perms.apagar);
             document.getElementById('btn-admin-users').style.display = adm ? 'block' : 'none';
         }
         function abrirSubSom() { fecharModais(); document.getElementById('modal-sub-som').style.display='flex'; }
@@ -281,17 +274,18 @@
         function fecharModais() { document.querySelectorAll('.modal').forEach(m => { if(m.id !== 'login-screen') m.style.display='none'; }); }
 
         function listarUsers() {
-            let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
+            let db = obterDB();
             let div = document.getElementById('lista-usuarios'); div.innerHTML = "";
             db.forEach((u, i) => {
-                if(u.user === MASTER.user) return;
-                div.innerHTML += `<div class="config-row"><span>${u.user}</span><div>${(uLogado.user===MASTER.user || uLogado.isGuest || uLogado.perms.editar) ? `<i class="fa-solid fa-gear" onclick="abrirConfirmacao('edit', ${i})" style="margin-right:15px; cursor:pointer"></i>` : ''}${(uLogado.user===MASTER.user || uLogado.isGuest || uLogado.perms.apagar) ? `<i class="fa-solid fa-trash-can" onclick="abrirConfirmacao('del', ${i})" style="color:#ff5252; cursor:pointer"></i>` : ''}</div></div>`;
+                if(u.user === USUARIOS_PADRAO[0].user) return;
+                let isFixed = USUARIOS_PADRAO.some(x => x.user === u.user);
+                div.innerHTML += `<div class="config-row"><span>${u.user} ${isFixed ? '<small>(SISTEMA)</small>':''}</span><div>${(uLogado.user===USUARIOS_PADRAO[0].user || uLogado.isGuest || uLogado.perms.editar) ? `<i class="fa-solid fa-gear" onclick="abrirConfirmacao('edit', ${i})" style="margin-right:15px; cursor:pointer"></i>` : ''}${(uLogado.user===USUARIOS_PADRAO[0].user || uLogado.isGuest || uLogado.perms.apagar) && !isFixed ? `<i class="fa-solid fa-trash-can" onclick="abrirConfirmacao('del', ${i})" style="color:#ff5252; cursor:pointer"></i>` : ''}</div></div>`;
             });
-            document.getElementById('form-add').style.display = (uLogado.user===MASTER.user || uLogado.isGuest || uLogado.perms.criar) ? 'block' : 'none';
+            document.getElementById('form-add').style.display = (uLogado.user===USUARIOS_PADRAO[0].user || uLogado.isGuest || uLogado.perms.criar) ? 'block' : 'none';
         }
 
         function abrirEditar(i) {
-            editIdx = i; let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
+            editIdx = i; let db = obterDB();
             let u = db[i]; document.getElementById('edit-title').innerText = "Permissões: " + u.user;
             document.getElementById('p-operar').checked = u.perms.operar; document.getElementById('p-criar').checked = u.perms.criar;
             document.getElementById('p-editar').checked = u.perms.editar; document.getElementById('p-apagar').checked = u.perms.apagar;
@@ -301,10 +295,21 @@
         function fecharEdit() { document.getElementById('modal-edit-perm').style.display='none'; abrirAdmin(); }
         
         function salvarPermissoes() {
-            if(uLogado.isGuest) { audio.success(); fecharEdit(); return; } // Simulação
-            let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
-            db[editIdx].perms = { operar: document.getElementById('p-operar').checked, criar: document.getElementById('p-criar').checked, editar: document.getElementById('p-editar').checked, apagar: document.getElementById('p-apagar').checked };
-            localStorage.setItem('usuarios_guber', JSON.stringify(db)); audio.success(); fecharEdit();
+            if(uLogado.isGuest) { audio.success(); fecharEdit(); return; }
+            let dbCompleto = obterDB();
+            let userAlvo = dbCompleto[editIdx];
+            
+            // Se for usuário de sistema, não permite alterar via navegador (segurança)
+            if(USUARIOS_PADRAO.some(x => x.user === userAlvo.user)) { alert("USUÁRIO DE SISTEMA NÃO PODE SER ALTERADO"); fecharEdit(); return; }
+
+            let criados = JSON.parse(localStorage.getItem('usuarios_guber')) || [];
+            let idxNoLocal = criados.findIndex(x => x.user === userAlvo.user);
+            
+            if(idxNoLocal !== -1) {
+                criados[idxNoLocal].perms = { operar: document.getElementById('p-operar').checked, criar: document.getElementById('p-criar').checked, editar: document.getElementById('p-editar').checked, apagar: document.getElementById('p-apagar').checked };
+                localStorage.setItem('usuarios_guber', JSON.stringify(criados));
+            }
+            audio.success(); fecharEdit();
         }
 
         function abrirConfirmacao(t, i=null) { acaoPendente = {tipo:t, index:i}; document.getElementById('modal-confirm').style.display='flex'; }
@@ -312,20 +317,23 @@
 
         function validarAcao() {
             if(document.getElementById('pass-confirm').value !== uLogado.pass) { audio.error(); alert("SENHA INCORRETA"); return; }
-            
-            if(uLogado.isGuest) { audio.success(); fecharConfirm(); if(acaoPendente.tipo === 'edit') abrirEditar(acaoPendente.index); else listarUsers(); return; } // Simulação
+            if(uLogado.isGuest) { audio.success(); fecharConfirm(); if(acaoPendente.tipo === 'edit') abrirEditar(acaoPendente.index); else listarUsers(); return; }
 
-            let db = JSON.parse(localStorage.getItem('usuarios_guber')) || [MASTER];
+            let dbCompleto = obterDB();
+            let criados = JSON.parse(localStorage.getItem('usuarios_guber')) || [];
+
             if(acaoPendente.tipo === 'add') {
-                db.push({user: document.getElementById('new-user').value, pass: document.getElementById('new-pass').value, perms: {operar:true, criar:false, editar:false, apagar:false}});
+                criados.push({user: document.getElementById('new-user').value, pass: document.getElementById('new-pass').value, perms: {operar:true, criar:false, editar:false, apagar:false}});
+                localStorage.setItem('usuarios_guber', JSON.stringify(criados));
                 document.getElementById('new-user').value = ""; document.getElementById('new-pass').value = "";
-                localStorage.setItem('usuarios_guber', JSON.stringify(db)); audio.success(); fecharConfirm(); listarUsers();
             } else if(acaoPendente.tipo === 'del') {
-                db.splice(acaoPendente.index, 1);
-                localStorage.setItem('usuarios_guber', JSON.stringify(db)); audio.success(); fecharConfirm(); listarUsers();
+                let userAlvo = dbCompleto[acaoPendente.index];
+                criados = criados.filter(x => x.user !== userAlvo.user);
+                localStorage.setItem('usuarios_guber', JSON.stringify(criados));
             } else if(acaoPendente.tipo === 'edit') {
-                audio.success(); fecharConfirm(); abrirEditar(acaoPendente.index);
+                audio.success(); fecharConfirm(); abrirEditar(acaoPendente.index); return;
             }
+            audio.success(); fecharConfirm(); listarUsers();
         }
     </script>
 </body>
